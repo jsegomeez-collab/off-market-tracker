@@ -20,6 +20,11 @@ from typing import Sequence
 import httpx
 
 
+def _env(name: str, default: str | None = None) -> str | None:
+    v = os.getenv(name, default)
+    return v.strip() if isinstance(v, str) else v
+
+
 def _format_card(row: sqlite3.Row) -> str:
     reasons = []
     if row["score_reasons"]:
@@ -71,8 +76,8 @@ def _format_html(rows: Sequence[sqlite3.Row]) -> str:
 
 
 def send_telegram(rows: Sequence[sqlite3.Row]) -> bool:
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    token = _env("TELEGRAM_BOT_TOKEN")
+    chat_id = _env("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
         print("[notify] Telegram skipped (no token/chat_id)")
         return False
@@ -100,9 +105,9 @@ def send_telegram(rows: Sequence[sqlite3.Row]) -> bool:
 
 
 def send_email(rows: Sequence[sqlite3.Row]) -> bool:
-    user = os.getenv("GMAIL_USER")
-    pwd = os.getenv("GMAIL_APP_PASSWORD")
-    to_addr = os.getenv("NOTIFY_EMAIL", user)
+    user = _env("GMAIL_USER")
+    pwd = _env("GMAIL_APP_PASSWORD")
+    to_addr = _env("NOTIFY_EMAIL", user)
     if not user or not pwd:
         print("[notify] Email skipped (no GMAIL_USER/GMAIL_APP_PASSWORD)")
         return False
