@@ -130,9 +130,11 @@ def send_email(rows: Sequence[sqlite3.Row]) -> bool:
         return False
 
 
-def notify_all(rows: Sequence[sqlite3.Row]) -> None:
+def notify_all(rows: Sequence[sqlite3.Row]) -> bool:
+    """Returns True if at least one channel successfully delivered."""
     if not rows:
         print("[notify] No new deals to notify")
-        return
-    send_telegram(rows)
-    send_email(rows)
+        return False
+    tg_ok = send_telegram(rows)
+    em_ok = send_email(rows)
+    return tg_ok or em_ok

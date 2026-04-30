@@ -61,11 +61,15 @@ def run() -> int:
 
     rows = top_unnotified(conn, min_score=MIN_NOTIFY_SCORE, limit=MAX_NOTIFY_PER_RUN)
     print(f"\n[notify] {len(rows)} deals at score >= {MIN_NOTIFY_SCORE}")
+    delivered = False
     if rows:
-        notify_all(rows)
-        mark_notified(conn, [r["id"] for r in rows])
+        delivered = notify_all(rows)
+        if delivered:
+            mark_notified(conn, [r["id"] for r in rows])
+        else:
+            print("[notify] no channel delivered — keeping deals unnotified for next run")
 
-    print(f"\n[done] total_found={total_found} total_new={total_new} notified={len(rows)}")
+    print(f"\n[done] total_found={total_found} total_new={total_new} queued={len(rows)} delivered={delivered}")
     return 0
 
 
