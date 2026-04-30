@@ -39,9 +39,9 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
-          MIN_NOTIFY_SCORE: '40'
-          MAX_NOTIFY_PER_RUN: '20'
-          MAX_ENRICH_PER_RUN: '20'
+          MIN_NOTIFY_SCORE: '70'
+          MAX_NOTIFY_PER_RUN: '15'
+          MAX_ENRICH_PER_RUN: '30'
           MAX_SKIP_TRACE_PER_RUN: '10'
         run: python -m src.main
 

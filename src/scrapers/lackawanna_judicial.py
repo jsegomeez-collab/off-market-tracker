@@ -135,7 +135,7 @@ def _parse_pdf_lines(pdf_bytes: bytes, source_url: str) -> list[Property]:
                 addr_part = _STATUS_RE.sub("", addr_part).strip(" \t|-")
 
                 seen.add(parcel)
-                ptype = classify(line, addr_part)
+                ptype = classify(line, addr_part, parcel)
 
                 out.append(
                     Property(

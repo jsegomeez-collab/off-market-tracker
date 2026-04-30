@@ -46,10 +46,13 @@ STREET_SUFFIX = re.compile(
 LEADING_NUMBER = re.compile(r"^\s*\d{1,6}\s+")
 
 
-def classify(description: str | None, address: str | None = None) -> str:
+def classify(description: str | None, address: str | None = None, parcel_id: str | None = None) -> str:
     blob = " ".join(filter(None, [description, address])).lower()
     if not blob:
         return "unknown"
+
+    if parcel_id and re.search(r"-T0?\d+-", parcel_id):
+        return "mobile_home"
 
     for tok in UNBUILDABLE_TOKENS:
         if tok in blob:

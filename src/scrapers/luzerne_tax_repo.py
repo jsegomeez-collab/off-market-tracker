@@ -120,7 +120,7 @@ def _parse_line(line: str, source_url: str) -> Property | None:
     if not owner or len(owner) < 2:
         return None
 
-    ptype = classify(line, address)
+    ptype = classify(line, address, parcel)
 
     return Property(
         source="luzerne_tax_repo",

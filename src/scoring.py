@@ -33,11 +33,26 @@ MULTI_UNIT_KEYWORDS = [
 ]
 
 SOURCE_BASE_SCORE = {
+    "luzerne_delinquent": 50,
     "luzerne_tax_repo": 35,
     "luzerne_sheriff": 20,
     "lackawanna_judicial": 30,
     "craigslist_scranton": 10,
 }
+
+OWNER_BLACKLIST_PATTERNS = [
+    "utilities", "water co", "water company", "electric co", "gas co",
+    "telephone", "communications", "verizon", "ppl", "ppl electric",
+    "school district", "borough of", "township of", "city of",
+    "county of", "commonwealth of pa", "authority", "redevelopment",
+    "conservancy", "land trust", "foundation",
+    "church", "diocese", "parish", "cemetery",
+    "post office", "u s postal", "usps",
+    "railroad", "rail co", "rr co",
+    "department of", "state of pennsylvania",
+    "homeowner association", "hoa", "community association",
+    "resort co", "resort association",
+]
 
 
 def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
@@ -47,6 +62,11 @@ def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
     county = (get("county", "") or "").lower()
     if county not in TARGET_COUNTIES:
         return -1, [f"outside target counties (county={county!r})"]
+
+    owner = (get("owner_name", "") or "").lower()
+    for pat in OWNER_BLACKLIST_PATTERNS:
+        if pat in owner:
+            return -1, [f"owner blacklist match: {pat!r}"]
 
     score = 0
     reasons: list[str] = []
@@ -129,6 +149,13 @@ def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
         elif "CONTINUED" in status:
             score += 5
             reasons.append("status:CONTINUED (live) +5")
+
+        if raw.get("is_out_of_state"):
+            score += 18
+            reasons.append("owner OUT-OF-STATE +18")
+        elif raw.get("is_absentee"):
+            score += 10
+            reasons.append("owner ABSENTEE +10")
 
     if isinstance(raw, dict):
         jsd = raw.get("judicial_sale_date")

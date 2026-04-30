@@ -26,8 +26,10 @@ def _env(name: str, default: str | None = None) -> str | None:
 
 
 SOURCE_LABELS = {
+    "luzerne_delinquent": "🔥 TAX DELINQUENT (pre-judicial)",
     "luzerne_tax_repo": "🏛️ TAX REPOSITORY",
     "luzerne_sheriff": "⚖️ SHERIFF SALE",
+    "lackawanna_judicial": "🏛️ JUDICIAL SALE",
     "craigslist_scranton": "📰 FSBO (Craigslist)",
 }
 
@@ -36,9 +38,14 @@ PRICE_NOTES = {
     "luzerne_sheriff": "Foreclosure judgment amount.",
     "lackawanna_judicial": "Upset minimum bid (real auction starting price).",
     "craigslist_scranton": "Owner's asking price.",
+    "luzerne_delinquent": "Back-taxes shown below; price negotiated DIRECTLY with owner.",
 }
 
 REAL_BUY_NOTES = {
+    "luzerne_delinquent": (
+        "Owner STILL owns it. Send letter / call. They pay back taxes from "
+        "your purchase price + close fast to avoid sheriff sale."
+    ),
     "luzerne_tax_repo": (
         "Repository purchase = $500 (lot) or $1,000 (with structure) + $100 fee. "
         "Back taxes EXONERATED on deed recording."
@@ -156,7 +163,21 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     if real_address and real_address != row["address"]:
         lines.append(f"   <i>(repo PDF says: {row['address']})</i>")
     if row["owner_name"]:
-        lines.append(f"👤 Owner: <code>{row['owner_name']}</code>")
+        owner_line = f"👤 Owner: <code>{row['owner_name']}</code>"
+        mc = raw_data.get("owner_mailing_city") if isinstance(raw_data, dict) else None
+        ms = raw_data.get("owner_mailing_state") if isinstance(raw_data, dict) else None
+        mz = raw_data.get("owner_mailing_zip") if isinstance(raw_data, dict) else None
+        if mc:
+            mailing = f"{mc.strip()}, {ms or 'PA'}"
+            if mz:
+                mailing += f" {mz.strip()}"
+            owner_line += f"\n   📬 Mails to: {mailing}"
+            if isinstance(raw_data, dict):
+                if raw_data.get("is_out_of_state"):
+                    owner_line += " <b>🛫 OUT-OF-STATE</b>"
+                elif raw_data.get("is_absentee"):
+                    owner_line += " <b>🏃 ABSENTEE</b>"
+        lines.append(owner_line)
     if row["parcel_id"]:
         lines.append(f"🔢 Parcel: <code>{row['parcel_id']}</code>")
     lines.append(f"💵 {price} <i>{note}</i>" if note else f"💵 {price}")

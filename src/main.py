@@ -29,11 +29,13 @@ from . import enrich
 from .scrapers import (
     luzerne_tax_repo,
     luzerne_sheriff,
+    luzerne_delinquent,
     craigslist_scranton,
     lackawanna_judicial,
 )
 
 SCRAPERS = [
+    ("luzerne_delinquent", luzerne_delinquent.scrape),
     ("luzerne_tax_repo", luzerne_tax_repo.scrape),
     ("luzerne_sheriff", luzerne_sheriff.scrape),
     ("lackawanna_judicial", lackawanna_judicial.scrape),
