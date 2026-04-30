@@ -86,20 +86,8 @@ def _extract_results(html: str) -> dict:
     }
 
 
-def lookup(owner_name: str, city: str | None = None) -> dict | None:
-    parts = _split_owner(owner_name)
-    if not parts:
-        return None
-    first, last = parts
-
-    qs_name = f"{first}+{last}".replace(" ", "+")
-    qs_loc = ""
-    if city:
-        qs_loc = f"&citystatezip={city.replace(' ', '+')}+PA"
-
-    url = f"https://www.truepeoplesearch.com/results?name={qs_name}{qs_loc}"
+def _try_url(url: str) -> dict | None:
     ua = random.choice(UA_POOL)
-
     try:
         with httpx.Client(
             headers={
@@ -117,6 +105,35 @@ def lookup(owner_name: str, city: str | None = None) -> dict | None:
             return {**_extract_results(r.text), "url": url, "html_len": len(r.text)}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}", "url": url}
+
+
+def lookup(owner_name: str, city: str | None = None) -> dict | None:
+    parts = _split_owner(owner_name)
+    if not parts:
+        return None
+    first, last = parts
+
+    qs_name = f"{first}+{last}".replace(" ", "+")
+    loc_suffix = ""
+    if city:
+        loc_suffix = f"&citystatezip={city.replace(' ', '+')}+PA"
+
+    primary = f"https://www.truepeoplesearch.com/results?name={qs_name}{loc_suffix}"
+    result = _try_url(primary)
+    if result and (result.get("phones") or not result.get("error")):
+        return result
+
+    fallback = (
+        f"https://www.fastpeoplesearch.com/name/{first.lower()}-{last.lower()}_pa"
+        if not city
+        else f"https://www.fastpeoplesearch.com/name/{first.lower()}-{last.lower()}_{city.lower().replace(' ', '-')}-pa"
+    )
+    fb_result = _try_url(fallback)
+    if fb_result and fb_result.get("phones"):
+        fb_result["fallback"] = "fastpeoplesearch"
+        return fb_result
+
+    return result or fb_result
 
 
 def get_cached(conn: sqlite3.Connection, owner_name: str, city: str | None) -> sqlite3.Row | None:

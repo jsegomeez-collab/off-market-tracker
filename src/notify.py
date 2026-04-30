@@ -32,12 +32,20 @@ SOURCE_LABELS = {
 }
 
 PRICE_NOTES = {
-    "luzerne_tax_repo": (
-        "Assessed value (county tax basis). Real cost to acquire: "
-        "$500 (vacant lot) or $1,000 (with structure) + $100 fee + back taxes."
-    ),
-    "luzerne_sheriff": "Judgment amount on the foreclosure (not final sale price; auction starts at upset price).",
+    "luzerne_tax_repo": "County assessed value (NOT purchase price).",
+    "luzerne_sheriff": "Foreclosure judgment amount.",
+    "lackawanna_judicial": "Upset minimum bid (real auction starting price).",
     "craigslist_scranton": "Owner's asking price.",
+}
+
+REAL_BUY_NOTES = {
+    "luzerne_tax_repo": (
+        "Repository purchase = $500 (lot) or $1,000 (with structure) + $100 fee. "
+        "Back taxes EXONERATED on deed recording."
+    ),
+    "luzerne_sheriff": "Auction starts at upset price (clerk publishes 30 days before sale).",
+    "lackawanna_judicial": "Min bid above. Free of liens/taxes if won at judicial.",
+    "craigslist_scranton": "Negotiable with owner.",
 }
 
 
@@ -137,20 +145,40 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     type_emoji = PROPERTY_TYPE_EMOJI.get(ptype, "❓")
     type_label = PROPERTY_TYPE_LABEL.get(ptype, ptype)
 
+    real_address = raw_data.get("real_address") if isinstance(raw_data, dict) else None
+    display_address = real_address or row["address"]
+
     lines = [
         f"<b>[{row['score']}] {label}</b>",
-        f"📍 <b>{row['address']}</b>",
+        f"📍 <b>{display_address}</b>",
         f"   {row['city'] or '?'} · PA · {type_emoji} {type_label}",
     ]
+    if real_address and real_address != row["address"]:
+        lines.append(f"   <i>(repo PDF says: {row['address']})</i>")
     if row["owner_name"]:
         lines.append(f"👤 Owner: <code>{row['owner_name']}</code>")
     if row["parcel_id"]:
         lines.append(f"🔢 Parcel: <code>{row['parcel_id']}</code>")
-    lines.append(f"💵 {price}")
-    if note:
-        lines.append(f"   <i>{note}</i>")
+    lines.append(f"💵 {price} <i>{note}</i>" if note else f"💵 {price}")
+
+    real_buy = REAL_BUY_NOTES.get(row["source"])
+    if real_buy:
+        lines.append(f"💰 <b>How to buy:</b> {real_buy}")
+
+    bt = raw_data.get("back_taxes") if isinstance(raw_data, dict) else None
+    if bt is not None:
+        years = raw_data.get("years_owed") or []
+        years_span = f" ({min(years)}–{max(years)})" if years else ""
+        if row["source"] == "luzerne_tax_repo":
+            lines.append(f"📊 Back taxes owed: <b>${bt:,.0f}</b>{years_span} <i>(exonerated on repo purchase)</i>")
+        else:
+            lines.append(f"📊 Back taxes: <b>${bt:,.0f}</b>{years_span}")
+
     if age_line:
         lines.append(age_line)
+    status = raw_data.get("status") if isinstance(raw_data, dict) else None
+    if status and status != "OPEN":
+        lines.append(f"📋 Status: <code>{status}</code>")
 
     phones_raw = None
     try:

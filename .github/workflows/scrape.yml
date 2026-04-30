@@ -16,7 +16,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +41,8 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           MIN_NOTIFY_SCORE: '40'
           MAX_NOTIFY_PER_RUN: '20'
+          MAX_ENRICH_PER_RUN: '20'
+          MAX_SKIP_TRACE_PER_RUN: '10'
         run: python -m src.main
 
       - name: Commit DB state

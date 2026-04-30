@@ -24,6 +24,7 @@ from .db import (
 from .scoring import score_all_unscored
 from .notify import notify_all
 from . import skip_trace
+from . import enrich
 
 from .scrapers import (
     luzerne_tax_repo,
@@ -70,11 +71,17 @@ def run() -> int:
     print(f"\n[notify] {len(rows)} deals at score >= {MIN_NOTIFY_SCORE}")
     delivered = False
     if rows:
+        max_enrich = int(os.getenv("MAX_ENRICH_PER_RUN", "20"))
+        if max_enrich > 0:
+            done = enrich.enrich_rows(conn, rows, max_lookups=max_enrich)
+            print(f"[enrich] performed {done} back-tax lookups (cap={max_enrich})")
+
         max_skip = int(os.getenv("MAX_SKIP_TRACE_PER_RUN", "10"))
         if max_skip > 0:
             looked = skip_trace.enrich_rows(conn, rows, max_lookups=max_skip)
             print(f"[skip-trace] performed {looked} new lookups (cap={max_skip})")
-            rows = top_unnotified(conn, min_score=MIN_NOTIFY_SCORE, limit=MAX_NOTIFY_PER_RUN)
+
+        rows = top_unnotified(conn, min_score=MIN_NOTIFY_SCORE, limit=MAX_NOTIFY_PER_RUN)
         delivered = notify_all(rows)
         if delivered:
             mark_notified(conn, [r["id"] for r in rows])
