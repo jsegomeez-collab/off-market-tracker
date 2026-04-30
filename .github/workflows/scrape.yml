@@ -1,0 +1,56 @@
+name: Deal Radar — scrape & notify
+
+on:
+  schedule:
+    # every 6 hours (00:15, 06:15, 12:15, 18:15 UTC)
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deal-radar
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scrapers + notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          MIN_NOTIFY_SCORE: '40'
+          MAX_NOTIFY_PER_RUN: '20'
+        run: python -m src.main
+
+      - name: Commit DB state
+        run: |
+          git config user.name "deal-radar-bot"
+          git config user.email "deal-radar-bot@users.noreply.github.com"
+          git add data/deals.db
+          if git diff --cached --quiet; then
+            echo "No DB changes to commit"
+          else
+            git commit -m "data: scrape run $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi

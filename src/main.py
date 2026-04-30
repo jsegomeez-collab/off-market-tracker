@@ -1,0 +1,73 @@
+"""
+Deal Radar orchestrator.
+
+Runs all scrapers, dedups + persists to SQLite, scores everything new,
+then notifies the top unnotified deals via Telegram + email.
+
+Run locally:  python -m src.main
+GH Actions:   see .github/workflows/scrape.yml
+"""
+
+from __future__ import annotations
+
+import os
+import traceback
+from datetime import datetime
+
+from .db import (
+    get_conn,
+    upsert_properties,
+    log_run,
+    top_unnotified,
+    mark_notified,
+)
+from .scoring import score_all_unscored
+from .notify import notify_all
+
+from .scrapers import luzerne_tax_repo, luzerne_sheriff, craigslist_scranton
+
+SCRAPERS = [
+    ("luzerne_tax_repo", luzerne_tax_repo.scrape),
+    ("luzerne_sheriff", luzerne_sheriff.scrape),
+    ("craigslist_scranton", craigslist_scranton.scrape),
+]
+
+MIN_NOTIFY_SCORE = int(os.getenv("MIN_NOTIFY_SCORE", "40"))
+MAX_NOTIFY_PER_RUN = int(os.getenv("MAX_NOTIFY_PER_RUN", "20"))
+
+
+def run() -> int:
+    conn = get_conn()
+    total_found = 0
+    total_new = 0
+
+    for name, scrape_fn in SCRAPERS:
+        started = datetime.utcnow()
+        try:
+            print(f"\n[scrape] {name} starting...")
+            props = scrape_fn()
+            found, new = upsert_properties(conn, props)
+            log_run(conn, name, started, found, new)
+            print(f"[scrape] {name}: found={found} new={new}")
+            total_found += found
+            total_new += new
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            print(f"[scrape] {name} ERROR: {err}")
+            log_run(conn, name, started, 0, 0, error=err[:1000])
+
+    n_scored = score_all_unscored(conn)
+    print(f"\n[score] scored {n_scored} new properties")
+
+    rows = top_unnotified(conn, min_score=MIN_NOTIFY_SCORE, limit=MAX_NOTIFY_PER_RUN)
+    print(f"\n[notify] {len(rows)} deals at score >= {MIN_NOTIFY_SCORE}")
+    if rows:
+        notify_all(rows)
+        mark_notified(conn, [r["id"] for r in rows])
+
+    print(f"\n[done] total_found={total_found} total_new={total_new} notified={len(rows)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(run())
