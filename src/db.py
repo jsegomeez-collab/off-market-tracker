@@ -39,6 +39,23 @@ CREATE INDEX IF NOT EXISTS idx_score ON properties(score DESC);
 CREATE INDEX IF NOT EXISTS idx_first_seen ON properties(first_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_notified ON properties(notified);
 
+CREATE TABLE IF NOT EXISTS skip_trace (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_name TEXT NOT NULL,
+    city TEXT,
+    state TEXT DEFAULT 'PA',
+    phones TEXT,
+    age TEXT,
+    current_address TEXT,
+    relatives TEXT,
+    source TEXT DEFAULT 'truepeoplesearch',
+    raw TEXT,
+    looked_up_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(owner_name, city)
+);
+
+CREATE INDEX IF NOT EXISTS idx_skip_owner ON skip_trace(owner_name);
+
 CREATE TABLE IF NOT EXISTS scrape_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
@@ -106,7 +123,19 @@ def unscored_properties(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def top_unnotified(conn: sqlite3.Connection, min_score: int = 40, limit: int = 20) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM properties WHERE notified = 0 AND score >= ? ORDER BY score DESC LIMIT ?",
+        """
+        SELECT p.*,
+               st.phones AS st_phones,
+               st.age AS st_age,
+               st.current_address AS st_current_address
+        FROM properties p
+        LEFT JOIN skip_trace st
+          ON st.owner_name = p.owner_name
+         AND COALESCE(st.city,'') = COALESCE(p.city,'')
+        WHERE p.notified = 0 AND p.score >= ?
+        ORDER BY p.score DESC
+        LIMIT ?
+        """,
         (min_score, limit),
     ).fetchall()
 

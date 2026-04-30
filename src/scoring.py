@@ -90,6 +90,22 @@ def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
         score += 15
         reasons.append(f"multi-unit({multi_hits[0]}) +15")
 
+    ptype = (get("property_type") or "").lower()
+    if ptype == "unbuildable":
+        return -1, reasons + [f"property_type=unbuildable (filter)"]
+    if ptype == "structure_multi":
+        score += 20
+        reasons.append("type:multi-family +20")
+    elif ptype == "structure_sfh":
+        score += 12
+        reasons.append("type:single-family +12")
+    elif ptype == "mobile_home":
+        score -= 5
+        reasons.append("type:mobile_home -5")
+    elif ptype == "vacant_lot":
+        score -= 8
+        reasons.append("type:vacant_lot -8")
+
     city = (get("city", "") or "").lower()
     if any(tc in city for tc in TOP_CITIES_LUZERNE):
         score += 10

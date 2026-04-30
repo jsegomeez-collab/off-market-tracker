@@ -14,6 +14,7 @@ import httpx
 import pdfplumber
 from selectolax.parser import HTMLParser
 from ..models import Property
+from ..classify import classify
 
 REPO_PAGE = "https://luzernecountytaxclaim.com/repository/"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 OffmarketBot/1.0"
@@ -119,6 +120,8 @@ def _parse_line(line: str, source_url: str) -> Property | None:
     if not owner or len(owner) < 2:
         return None
 
+    ptype = classify(line, address)
+
     return Property(
         source="luzerne_tax_repo",
         source_id=parcel,
@@ -128,7 +131,7 @@ def _parse_line(line: str, source_url: str) -> Property | None:
         county="luzerne",
         owner_name=owner[:200],
         listing_price=assessed_value,
-        property_type="repository",
+        property_type=ptype,
         description=line.strip(),
         url=source_url,
         raw={
@@ -136,6 +139,7 @@ def _parse_line(line: str, source_url: str) -> Property | None:
             "pdf": source_url,
             "assessed_value": assessed_value,
             "judicial_sale_date": judicial_sale_date,
+            "list_source": "tax_repository",
         },
     )
 

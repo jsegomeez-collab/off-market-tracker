@@ -12,6 +12,7 @@ import re
 import httpx
 from selectolax.parser import HTMLParser
 from ..models import Property
+from ..classify import classify
 
 PORTAL = "https://sheriffsale.luzernecounty.org/Sheriff.Salelisting/"
 USER_AGENT = (
@@ -80,6 +81,7 @@ def scrape() -> list[Property]:
             except ValueError:
                 pass
 
+        ptype = classify(text, address)
         out.append(
             Property(
                 source="luzerne_sheriff",
@@ -87,10 +89,10 @@ def scrape() -> list[Property]:
                 address=address,
                 county="luzerne",
                 listing_price=judgment,
-                property_type="sheriff_sale",
+                property_type=ptype,
                 description=text[:500],
                 url=href or PORTAL,
-                raw={"text": text[:1000]},
+                raw={"text": text[:1000], "list_source": "sheriff_foreclosure"},
             )
         )
     return out

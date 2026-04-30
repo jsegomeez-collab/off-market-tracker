@@ -124,10 +124,15 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
         except ValueError:
             pass
 
+    from .classify import PROPERTY_TYPE_EMOJI, PROPERTY_TYPE_LABEL
+    ptype = (row["property_type"] or "unknown").lower()
+    type_emoji = PROPERTY_TYPE_EMOJI.get(ptype, "❓")
+    type_label = PROPERTY_TYPE_LABEL.get(ptype, ptype)
+
     lines = [
         f"<b>[{row['score']}] {label}</b>",
         f"📍 <b>{row['address']}</b>",
-        f"   {row['city'] or '?'} · PA",
+        f"   {row['city'] or '?'} · PA · {type_emoji} {type_label}",
     ]
     if row["owner_name"]:
         lines.append(f"👤 Owner: <code>{row['owner_name']}</code>")
@@ -138,6 +143,20 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
         lines.append(f"   <i>{note}</i>")
     if age_line:
         lines.append(age_line)
+
+    phones_raw = None
+    try:
+        phones_raw = row["st_phones"]
+    except (IndexError, KeyError):
+        pass
+    if phones_raw:
+        try:
+            phones = json.loads(phones_raw) if isinstance(phones_raw, str) else phones_raw
+        except (json.JSONDecodeError, TypeError):
+            phones = []
+        if phones:
+            tel_links = " · ".join(f'<a href="tel:{p}">{p}</a>' for p in phones[:3])
+            lines.append(f"📞 {tel_links}")
 
     links = []
     maps = _maps_url(row["address"], row["city"])
