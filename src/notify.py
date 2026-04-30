@@ -55,15 +55,14 @@ def _gis_url(parcel_id: str | None) -> str | None:
     return f"https://app.regrid.com/search?query={parcel_id.replace(' ', '+')}&context=us/pa/luzerne"
 
 
-def _people_search_url(owner_name: str | None, city: str | None) -> str | None:
+def _people_search_url(owner_name: str | None) -> str | None:
     if not owner_name:
         return None
     parts = owner_name.replace(",", " ").split()
     if len(parts) < 2:
         return None
     last, first = parts[0], parts[1]
-    base = f"https://www.truepeoplesearch.com/results?name={first}+{last}&citystatezip=PA"
-    return base
+    return f"https://www.truepeoplesearch.com/results?name={first}+{last}&citystatezip=PA"
 
 
 def _format_card(row: sqlite3.Row) -> str:
@@ -102,6 +101,29 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     price = f"${row['listing_price']:,.0f}" if row["listing_price"] else "n/a"
     note = PRICE_NOTES.get(row["source"], "")
 
+    raw_data = {}
+    if row["raw"]:
+        try:
+            raw_data = json.loads(row["raw"]) if isinstance(row["raw"], str) else row["raw"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    age_line = None
+    jsd = raw_data.get("judicial_sale_date") if isinstance(raw_data, dict) else None
+    if jsd:
+        try:
+            from datetime import datetime, date
+            sale_dt = datetime.strptime(jsd, "%m/%d/%Y").date()
+            years = (date.today() - sale_dt).days / 365.25
+            if years <= 2:
+                age_line = f"🟢 In repo since {jsd} ({years:.1f}y) — FRESH"
+            elif years <= 5:
+                age_line = f"🟡 In repo since {jsd} ({years:.1f}y)"
+            else:
+                age_line = f"🔴 In repo since {jsd} ({years:.0f}y) — likely problematic"
+        except ValueError:
+            pass
+
     lines = [
         f"<b>[{row['score']}] {label}</b>",
         f"📍 <b>{row['address']}</b>",
@@ -114,6 +136,8 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     lines.append(f"💵 {price}")
     if note:
         lines.append(f"   <i>{note}</i>")
+    if age_line:
+        lines.append(age_line)
 
     links = []
     maps = _maps_url(row["address"], row["city"])
@@ -122,7 +146,7 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     gis = _gis_url(row["parcel_id"])
     if gis:
         links.append(f'<a href="{gis}">🏠 GIS</a>')
-    skip = _people_search_url(row["owner_name"], row["city"])
+    skip = _people_search_url(row["owner_name"])
     if skip:
         links.append(f'<a href="{skip}">📞 Skip-trace</a>')
     if row["url"]:

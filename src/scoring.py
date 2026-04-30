@@ -7,7 +7,9 @@ Notification threshold (in main.py): score >= 40.
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import datetime, date
 
 TARGET_COUNTIES = {"luzerne"}
 
@@ -93,14 +95,39 @@ def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
         score += 10
         reasons.append(f"top-city:{city} +10")
 
+    raw_str = get("raw") or ""
+    if raw_str:
+        try:
+            raw = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
+        except (json.JSONDecodeError, TypeError):
+            raw = {}
+        jsd = raw.get("judicial_sale_date") if isinstance(raw, dict) else None
+        if jsd:
+            try:
+                sale_dt = datetime.strptime(jsd, "%m/%d/%Y").date()
+                years_in_repo = (date.today() - sale_dt).days / 365.25
+                if years_in_repo <= 2:
+                    score += 15
+                    reasons.append(f"fresh repo entry ({years_in_repo:.1f}y) +15")
+                elif years_in_repo <= 5:
+                    score += 5
+                    reasons.append(f"recent repo entry ({years_in_repo:.1f}y) +5")
+                elif years_in_repo > 10:
+                    score -= 15
+                    reasons.append(f"stale repo entry ({years_in_repo:.0f}y) -15")
+                elif years_in_repo > 5:
+                    score -= 8
+                    reasons.append(f"older repo entry ({years_in_repo:.0f}y) -8")
+            except ValueError:
+                pass
+
     score = max(-1, min(100, score))
     return score, reasons
 
 
 def score_all_unscored(conn: sqlite3.Connection) -> int:
     """Score every property where score_reasons IS NULL. Returns count scored."""
-    import json
-
+    conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT * FROM properties WHERE score_reasons IS NULL"
     ).fetchall()

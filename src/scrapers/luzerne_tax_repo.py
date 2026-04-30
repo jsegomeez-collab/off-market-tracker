@@ -105,6 +105,8 @@ def _parse_line(line: str, source_url: str) -> Property | None:
     else:
         after_money = after
 
+    date_match = _DATE_RE.search(after_money)
+    judicial_sale_date = date_match.group(0) if date_match else None
     after_no_date = _DATE_RE.sub("", after_money).strip()
 
     city = _classify_city(after_no_date)
@@ -129,7 +131,12 @@ def _parse_line(line: str, source_url: str) -> Property | None:
         property_type="repository",
         description=line.strip(),
         url=source_url,
-        raw={"line": line.strip(), "pdf": source_url, "assessed_value": assessed_value},
+        raw={
+            "line": line.strip(),
+            "pdf": source_url,
+            "assessed_value": assessed_value,
+            "judicial_sale_date": judicial_sale_date,
+        },
     )
 
 
