@@ -49,6 +49,14 @@ def _maps_url(address: str | None, city: str | None) -> str | None:
     return f"https://www.google.com/maps/search/?api=1&query={q}"
 
 
+def _street_view_url(address: str | None, city: str | None) -> str | None:
+    if not address:
+        return None
+    parts = [p for p in [address, city, "PA"] if p]
+    q = ", ".join(parts).replace(" ", "+")
+    return f"https://www.google.com/maps/@?api=1&map_action=pano&pano_query={q}"
+
+
 def _gis_url(parcel_id: str | None) -> str | None:
     if not parcel_id:
         return None
@@ -162,6 +170,9 @@ def _format_telegram_html(row: sqlite3.Row) -> str:
     maps = _maps_url(row["address"], row["city"])
     if maps:
         links.append(f'<a href="{maps}">🗺️ Maps</a>')
+    sv = _street_view_url(row["address"], row["city"])
+    if sv:
+        links.append(f'<a href="{sv}">📸 StreetView</a>')
     gis = _gis_url(row["parcel_id"])
     if gis:
         links.append(f'<a href="{gis}">🏠 GIS</a>')

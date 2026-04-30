@@ -11,10 +11,11 @@ import json
 import sqlite3
 from datetime import datetime, date
 
-TARGET_COUNTIES = {"luzerne"}
+TARGET_COUNTIES = {"luzerne", "lackawanna"}
 
-TOP_CITIES_LUZERNE = {
+TOP_CITIES = {
     "wilkes-barre", "wilkes barre", "hazleton", "nanticoke", "kingston", "pittston",
+    "scranton",
 }
 
 DISTRESS_KEYWORDS = [
@@ -34,6 +35,7 @@ MULTI_UNIT_KEYWORDS = [
 SOURCE_BASE_SCORE = {
     "luzerne_tax_repo": 35,
     "luzerne_sheriff": 20,
+    "lackawanna_judicial": 30,
     "craigslist_scranton": 10,
 }
 
@@ -107,17 +109,29 @@ def score_property(row: sqlite3.Row | dict) -> tuple[int, list[str]]:
         reasons.append("type:vacant_lot -8")
 
     city = (get("city", "") or "").lower()
-    if any(tc in city for tc in TOP_CITIES_LUZERNE):
+    if any(tc in city for tc in TOP_CITIES):
         score += 10
         reasons.append(f"top-city:{city} +10")
 
     raw_str = get("raw") or ""
+    raw = {}
     if raw_str:
         try:
             raw = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
         except (json.JSONDecodeError, TypeError):
             raw = {}
-        jsd = raw.get("judicial_sale_date") if isinstance(raw, dict) else None
+
+    if isinstance(raw, dict):
+        status = (raw.get("status") or "").upper()
+        if "NO BID" in status:
+            score += 12
+            reasons.append("status:NO BID (next-up for repo) +12")
+        elif "CONTINUED" in status:
+            score += 5
+            reasons.append("status:CONTINUED (live) +5")
+
+    if isinstance(raw, dict):
+        jsd = raw.get("judicial_sale_date")
         if jsd:
             try:
                 sale_dt = datetime.strptime(jsd, "%m/%d/%Y").date()

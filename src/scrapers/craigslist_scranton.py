@@ -29,24 +29,25 @@ LUZERNE_CITIES = {
     "wright township", "fairview township", "butler township",
 }
 
-
-def _is_luzerne(location_text: str) -> bool:
-    if not location_text:
-        return False
-    t = location_text.lower().strip()
-    for city in LUZERNE_CITIES:
-        if city in t:
-            return True
-    return False
+LACKAWANNA_CITIES = {
+    "scranton", "carbondale", "archbald", "blakely", "dickson city",
+    "dunmore", "old forge", "taylor", "throop", "moosic",
+    "mayfield", "olyphant", "jermyn", "jessup", "vandling",
+    "moscow", "dalton", "clarks summit", "clarks green",
+    "waverly", "factoryville",
+}
 
 
-def _city_from_location(location_text: str) -> str | None:
+def _city_match(location_text: str) -> tuple[str, str] | None:
     if not location_text:
         return None
     t = location_text.lower().strip()
     for city in LUZERNE_CITIES:
         if city in t:
-            return city.title()
+            return city.title(), "luzerne"
+    for city in LACKAWANNA_CITIES:
+        if city in t:
+            return city.title(), "lackawanna"
     return None
 
 
@@ -83,8 +84,10 @@ def scrape() -> list[Property]:
         price = _parse_price(price_node.text()) if price_node else None
         location = (loc_node.text() or "").strip() if loc_node else ""
 
-        if not _is_luzerne(location):
+        match = _city_match(location)
+        if not match:
             continue
+        city_name, county_name = match
 
         post_id_m = re.search(r"/(\d+)\.html", href)
         post_id = post_id_m.group(1) if post_id_m else href
@@ -94,8 +97,8 @@ def scrape() -> list[Property]:
                 source="craigslist_scranton",
                 source_id=f"cl-{post_id}",
                 address=title[:200],
-                city=_city_from_location(location),
-                county="luzerne",
+                city=city_name,
+                county=county_name,
                 listing_price=price,
                 property_type="fsbo",
                 description=title,

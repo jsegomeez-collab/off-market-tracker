@@ -25,11 +25,17 @@ from .scoring import score_all_unscored
 from .notify import notify_all
 from . import skip_trace
 
-from .scrapers import luzerne_tax_repo, luzerne_sheriff, craigslist_scranton
+from .scrapers import (
+    luzerne_tax_repo,
+    luzerne_sheriff,
+    craigslist_scranton,
+    lackawanna_judicial,
+)
 
 SCRAPERS = [
     ("luzerne_tax_repo", luzerne_tax_repo.scrape),
     ("luzerne_sheriff", luzerne_sheriff.scrape),
+    ("lackawanna_judicial", lackawanna_judicial.scrape),
     ("craigslist_scranton", craigslist_scranton.scrape),
 ]
 
