@@ -25,54 +25,118 @@ def _env(name: str, default: str | None = None) -> str | None:
     return v.strip() if isinstance(v, str) else v
 
 
+SOURCE_LABELS = {
+    "luzerne_tax_repo": "🏛️ TAX REPOSITORY",
+    "luzerne_sheriff": "⚖️ SHERIFF SALE",
+    "craigslist_scranton": "📰 FSBO (Craigslist)",
+}
+
+PRICE_NOTES = {
+    "luzerne_tax_repo": (
+        "Assessed value (county tax basis). Real cost to acquire: "
+        "$500 (vacant lot) or $1,000 (with structure) + $100 fee + back taxes."
+    ),
+    "luzerne_sheriff": "Judgment amount on the foreclosure (not final sale price; auction starts at upset price).",
+    "craigslist_scranton": "Owner's asking price.",
+}
+
+
+def _maps_url(address: str | None, city: str | None) -> str | None:
+    if not address:
+        return None
+    parts = [p for p in [address, city, "PA"] if p]
+    q = ", ".join(parts).replace(" ", "+")
+    return f"https://www.google.com/maps/search/?api=1&query={q}"
+
+
+def _gis_url(parcel_id: str | None) -> str | None:
+    if not parcel_id:
+        return None
+    return f"https://app.regrid.com/search?query={parcel_id.replace(' ', '+')}&context=us/pa/luzerne"
+
+
+def _people_search_url(owner_name: str | None, city: str | None) -> str | None:
+    if not owner_name:
+        return None
+    parts = owner_name.replace(",", " ").split()
+    if len(parts) < 2:
+        return None
+    last, first = parts[0], parts[1]
+    base = f"https://www.truepeoplesearch.com/results?name={first}+{last}&citystatezip=PA"
+    return base
+
+
 def _format_card(row: sqlite3.Row) -> str:
+    """Plain-text card for fallback/email. Telegram uses HTML."""
     reasons = []
     if row["score_reasons"]:
         try:
             reasons = json.loads(row["score_reasons"])
         except json.JSONDecodeError:
             reasons = []
-
+    label = SOURCE_LABELS.get(row["source"], row["source"])
     price = f"${row['listing_price']:,.0f}" if row["listing_price"] else "n/a"
     parts = [
-        f"[{row['score']}] {row['address']}",
-        f"  source: {row['source']} | city: {row['city'] or '?'} | price: {price}",
+        f"[{row['score']}] {label} — {row['address']}",
+        f"  city: {row['city'] or '?'} | price: {price}",
     ]
+    if row["owner_name"]:
+        parts.append(f"  owner: {row['owner_name']}")
     if row["parcel_id"]:
         parts.append(f"  parcel: {row['parcel_id']}")
+    note = PRICE_NOTES.get(row["source"])
+    if note:
+        parts.append(f"  note: {note}")
     if row["url"]:
-        parts.append(f"  link: {row['url']}")
+        parts.append(f"  source: {row['url']}")
+    maps = _maps_url(row["address"], row["city"])
+    if maps:
+        parts.append(f"  maps: {maps}")
     if reasons:
         parts.append(f"  why: {' | '.join(reasons)}")
     return "\n".join(parts)
 
 
+def _format_telegram_html(row: sqlite3.Row) -> str:
+    label = SOURCE_LABELS.get(row["source"], row["source"])
+    price = f"${row['listing_price']:,.0f}" if row["listing_price"] else "n/a"
+    note = PRICE_NOTES.get(row["source"], "")
+
+    lines = [
+        f"<b>[{row['score']}] {label}</b>",
+        f"📍 <b>{row['address']}</b>",
+        f"   {row['city'] or '?'} · PA",
+    ]
+    if row["owner_name"]:
+        lines.append(f"👤 Owner: <code>{row['owner_name']}</code>")
+    if row["parcel_id"]:
+        lines.append(f"🔢 Parcel: <code>{row['parcel_id']}</code>")
+    lines.append(f"💵 {price}")
+    if note:
+        lines.append(f"   <i>{note}</i>")
+
+    links = []
+    maps = _maps_url(row["address"], row["city"])
+    if maps:
+        links.append(f'<a href="{maps}">🗺️ Maps</a>')
+    gis = _gis_url(row["parcel_id"])
+    if gis:
+        links.append(f'<a href="{gis}">🏠 GIS</a>')
+    skip = _people_search_url(row["owner_name"], row["city"])
+    if skip:
+        links.append(f'<a href="{skip}">📞 Skip-trace</a>')
+    if row["url"]:
+        links.append(f'<a href="{row["url"]}">📄 Source</a>')
+    if links:
+        lines.append("   " + " · ".join(links))
+    return "\n".join(lines)
+
+
 def _format_html(rows: Sequence[sqlite3.Row]) -> str:
     cards = []
     for row in rows:
-        reasons_html = ""
-        if row["score_reasons"]:
-            try:
-                rs = json.loads(row["score_reasons"])
-                reasons_html = "<br><small style='color:#666'>" + " &middot; ".join(rs) + "</small>"
-            except json.JSONDecodeError:
-                pass
-        price = f"${row['listing_price']:,.0f}" if row["listing_price"] else "n/a"
-        url = row["url"] or "#"
-        cards.append(
-            f"""
-            <div style="border-left:4px solid #2563eb;padding:12px 16px;margin:12px 0;background:#f8fafc">
-              <div style="font-size:18px"><b>[{row['score']}]</b> {row['address']}</div>
-              <div style="color:#475569;margin-top:4px">
-                {row['source']} &middot; {row['city'] or '?'} &middot; <b>{price}</b>
-                {f" &middot; parcel: <code>{row['parcel_id']}</code>" if row['parcel_id'] else ""}
-              </div>
-              <div style="margin-top:8px"><a href="{url}">View source</a></div>
-              {reasons_html}
-            </div>
-            """
-        )
-    return f"<html><body style='font-family:system-ui,sans-serif;max-width:680px'>{''.join(cards)}</body></html>"
+        cards.append(f"<pre>{_format_telegram_html(row)}</pre>")
+    return f"<html><body>{''.join(cards)}</body></html>"
 
 
 def send_telegram(rows: Sequence[sqlite3.Row]) -> bool:
@@ -84,24 +148,44 @@ def send_telegram(rows: Sequence[sqlite3.Row]) -> bool:
     if not rows:
         return True
 
-    header = f"DEAL RADAR — {len(rows)} new opportunities"
-    body = "\n\n".join(_format_card(r) for r in rows)
-    message = f"{header}\n\n{body}"
+    header = f"<b>🚨 DEAL RADAR</b> — {len(rows)} new opportunities\n"
+    try:
+        r = httpx.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": header,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=20,
+        )
+        r.raise_for_status()
+    except Exception as e:
+        print(f"[notify] Telegram header error: {e}")
+        return False
 
-    for chunk_start in range(0, len(message), 4000):
-        chunk = message[chunk_start : chunk_start + 4000]
+    sent = 0
+    for row in rows:
+        msg = _format_telegram_html(row)
         try:
             r = httpx.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True},
+                json={
+                    "chat_id": chat_id,
+                    "text": msg,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
                 timeout=20,
             )
             r.raise_for_status()
+            sent += 1
         except Exception as e:
-            print(f"[notify] Telegram error: {e}")
-            return False
-    print(f"[notify] Telegram sent {len(rows)} deals")
-    return True
+            print(f"[notify] Telegram error on row {row['id']}: {e}")
+
+    print(f"[notify] Telegram sent {sent}/{len(rows)} deals")
+    return sent > 0
 
 
 def send_email(rows: Sequence[sqlite3.Row]) -> bool:
